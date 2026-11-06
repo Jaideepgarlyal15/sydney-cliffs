@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>__TITLE__</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="https://unpkg.com/deck.gl@9/dist.min.js"></script>
+<script src="https://unpkg.com/maplibre-gl@4/dist/maplibre-gl.js"></script>
+<link href="https://unpkg.com/maplibre-gl@4/dist/maplibre-gl.css" rel="stylesheet">
+<style>
+  html, body { margin: 0; height: 100%; background: #0b0d12; font-family: "Inter", system-ui, sans-serif; }
+  #frame { position: relative; width: 100vw; height: 100vh; margin: 0 auto; overflow: hidden; }
+  body.vertical #frame { height: 100vh; width: calc(100vh * 9 / 16); }
+  #map { position: absolute; inset: 0; }
+  .caption { position: absolute; left: 6%; right: 6%; top: 5%; color: #fff; pointer-events: none;
+             text-shadow: 0 2px 12px rgba(0,0,0,.8); }
+  .caption h1 { font-size: clamp(22px, 4.2vh, 56px); line-height: 1.1; margin: 0 0 .4em; font-weight: 800; }
+  .caption p { font-size: clamp(14px, 2.2vh, 30px); margin: 0; opacity: .9; }
+  .legend { position: absolute; left: 6%; bottom: 6%; color: #fff; font-size: clamp(11px, 1.6vh, 20px);
+            text-shadow: 0 1px 6px rgba(0,0,0,.9); }
+  .sw { display: inline-block; width: .9em; height: .9em; border-radius: 2px; margin: 0 .35em 0 1em; vertical-align: -0.1em; }
+  .credit { position: absolute; right: 2%; bottom: 1.2%; color: #9aa3b2; font-size: 11px; }
+</style>
+</head>
+<body>
+<div id="frame">
+  <div id="map"></div>
+  <div class="caption"><h1>__TITLE__</h1><p>__SUBTITLE__</p></div>
+  <div class="legend">Height = __VALUE_LABEL__ (percentile)
+    <span class="sw" style="background:#ffb000"></span>High cluster
+    <span class="sw" style="background:#3d8bfd"></span>Low cluster
+    <span class="sw" style="background:#ff2d55"></span>Cliff</div>
+  <div class="credit">ABS Census 2021 (CC BY 4.0) · © OpenStreetMap contributors · © CARTO</div>
+</div>
+<script>
+  if (new URLSearchParams(location.search).has('vertical')) document.body.classList.add('vertical');
+  const AREAS = __AREAS__;
+  const LINE = __LINE__;
+  const colour = l => l === 'HH' ? [255,176,0,235] : l === 'LL' ? [61,139,253,235] : [120,128,140,150];
+  let view = { longitude: __LON__, latitude: __LAT__, zoom: 14.6, pitch: 62, bearing: __BEARING__ };
+  const deckgl = new deck.DeckGL({
+    container: 'map',
+    map: maplibregl,
+    mapStyle: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
+    initialViewState: view,
+    controller: true,
+    layers: [
+      new deck.GeoJsonLayer({ id: 'areas', data: AREAS, extruded: true, wireframe: false,
+        getElevation: f => f.properties.h, getFillColor: f => colour(f.properties.label),
+        material: { ambient: 0.5, diffuse: 0.6, shininess: 20 } }),
+      new deck.GeoJsonLayer({ id: 'cliff', data: LINE, stroked: true, filled: false,
+        getLineColor: [255,45,85,255], getLineWidth: 14, lineWidthUnits: 'pixels' })
+    ]
+  });
+  // Slow fly-around for recording. Press space to pause.
+  let paused = false, t0 = performance.now();
+  document.addEventListener('keydown', e => { if (e.code === 'Space') paused = !paused; });
+  function spin(now) {
+    if (!paused) {
+      const dt = (now - t0) / 1000;
+      deckgl.setProps({ viewState: { ...view, bearing: view.bearing + 25 * Math.sin(dt / 6), zoom: view.zoom + 0.3 * Math.sin(dt / 9) } });
+    }
+    requestAnimationFrame(spin);
+  }
+  requestAnimationFrame(spin);
+</script>
+</body>
+</html>
