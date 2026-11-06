@@ -1,0 +1,11 @@
+{"elements": [
+  {"type": "way", "id": 1, "tags": {"highway": "secondary", "name": "Example Road"},
+   "geometry": [{"lat": -33.90, "lon": 151.20}, {"lat": -33.91, "lon": 151.20}]},
+  {"type": "way", "id": 2, "tags": {"railway": "rail", "name": "Example Line"},
+   "geometry": [{"lat": -33.90, "lon": 151.21}, {"lat": -33.91, "lon": 151.21}]},
+  {"type": "way", "id": 3, "tags": {"natural": "water"},
+   "geometry": [{"lat": -33.90, "lon": 151.22}, {"lat": -33.91, "lon": 151.22}]},
+  {"type": "way", "id": 4, "tags": {"leisure": "park", "name": "Example Park"},
+   "geometry": [{"lat": -33.90, "lon": 151.23}, {"lat": -33.91, "lon": 151.23}]},
+  {"type": "way", "id": 5, "tags": {"highway": "residential"}, "geometry": [{"lat": -33.9, "lon": 151.2}]}
+]}
