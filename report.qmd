@@ -1,0 +1,155 @@
+---
+title: "Sydney's Cliffs"
+subtitle: "Where one side of the street is a different Sydney"
+format:
+  html:
+    embed-resources: true
+    toc: true
+    theme: default
+execute:
+  echo: false
+  warning: false
+  message: false
+params:
+  out_dir: "out"
+  synthetic: false
+---
+
+```{r setup}
+library(sf)
+out <- params$out_dir
+meta <- jsonlite::read_json(file.path(out, "run_meta.json"))
+top  <- readr::read_csv(file.path(out, "cliffs_top.csv"), show_col_types = FALSE)
+chk_path <- file.path(out, "checks.rds")
+chk  <- if (file.exists(chk_path)) readRDS(chk_path) else NULL
+lisa <- sf::st_read(file.path(out, "cliffs.gpkg"), layer = "lisa", quiet = TRUE)
+lines <- sf::st_read(file.path(out, "cliffs.gpkg"), layer = "lines", quiet = TRUE)
+best <- if (nrow(top)) top[1, ] else NULL
+fmt <- function(x, d = 0) formatC(x, format = "f", digits = d, big.mark = ",")
+has <- function(col) !is.null(best) && col %in% names(best) && !is.na(best[[col]])
+```
+
+```{r synthetic-banner, results = "asis"}
+if (isTRUE(params$synthetic)) {
+  cat("::: {.callout-warning}\n**SYNTHETIC DATA.** This report was rendered from a generated test grid to prove the pipeline works end to end. None of these numbers describe Sydney.\n:::\n")
+}
+```
+
+## Finding
+
+```{r finding, results = "asis"}
+if (is.null(best)) {
+  cat("No cliff line met the criteria at the configured settings. See *What did not work*.\n")
+} else {
+  where <- if (has("border_name")) best$border_name else sprintf("the border between %s and %s", best$hi_area, best$lo_area)
+  cat(sprintf(
+    "The sharpest socio-economic cliff in Greater Sydney runs %s m along **%s**. On one side (%s), the median SEIFA advantage score is %s; on the other (%s), it is %s. ",
+    fmt(best$length_m), where, best$hi_area, fmt(best$irsad_2021_hi), best$lo_area, fmt(best$irsad_2021_lo)))
+  if (has("hh_income_wk_hi")) cat(sprintf(
+    "Median household income goes from $%s to $%s a week, and median rent from $%s to $%s. ",
+    fmt(best$hh_income_wk_hi), fmt(best$hh_income_wk_lo), fmt(best$rent_wk_hi), fmt(best$rent_wk_lo)))
+  if (has("passes_all")) cat(sprintf(
+    "It %s all three held-out checks (spatial null p = %s, present in 2016: %s, stable in %s%% of sensitivity runs).\n",
+    ifelse(best$passes_all, "passes", "does **not** pass"),
+    format(best$p_null, digits = 2), ifelse(best$in_2016, "yes", "no"), fmt(100 * best$stability)))
+}
+```
+
+## Data
+
+| Source | Use | Licence |
+|---|---|---|
+| ABS SEIFA 2021 and 2016, SA1 (IRSAD) | Headline advantage score | CC BY 4.0 |
+| ABS 2021 Census GCP DataPack, SA1 (G01, G02) | Population, income, rent, age | CC BY 4.0 |
+| ABS ASGS Edition 3 SA1 and Mesh Block boundaries | Areas, land use, change flags | CC BY 4.0 |
+| OpenStreetMap via Overpass | Name of the road or rail line along each cliff | ODbL |
+| Microburbs API (City of Sydney only) | Second-source check where available | Hackathon key, output not republished |
+
+Census figures describe **areas in 2021**, not individuals. ABS applies small random adjustments to cells to protect confidentiality, which is one reason for the population floor below.
+
+## Method
+
+```{r method-numbers, results = "asis"}
+cfg <- meta$config
+cat(sprintf(
+"1. **Universe.** %s Greater Sydney SA1s; we keep those with at least %s residents and at least %s%% residential land (mesh block categories), leaving %s areas.\n",
+fmt(meta$n_sa1_total), cfg$pop_floor, fmt(100 * cfg$min_residential), fmt(meta$n_units)))
+cat(sprintf(
+"2. **Neighbours.** Two SA1s are neighbours when their boundaries share at least %s m of line (rook contiguity measured on the ground): %s pairs, %s islands.\n",
+cfg$min_border_m, fmt(meta$n_edges), meta$islands))
+cat(sprintf(
+"3. **Clusters (LISA).** Local Moran's I with %s conditional permutations on neighbourhoods up to order %s, Benjamini-Hochberg FDR at q = %s. Global Moran's I = %s.\n",
+fmt(cfg$lisa_nsim), cfg$lisa_order, cfg$fdr_q, format(meta$moran_I, digits = 3)))
+cat(sprintf(
+"4. **Cliff borders.** Each border splits its neighbourhood into two sides. A border is a cliff border when the gap between the side means is in the top %s%% of all borders **and** the high side contains a significant High-High SA1 while the low side contains a significant Low-Low SA1. A lone outlier cannot pass, because its side is averaged with its ordinary neighbours.\n",
+fmt(100 * (1 - cfg$edge_pct))))
+cat(sprintf(
+"5. **Cliff lines.** Cliff borders within %s m of each other merge into one line, so one noisy border cannot split a cliff; lines shorter than %s m are dropped. Score = median gap percentile x log(length).\n",
+cfg$line_gap_m, cfg$min_line_m))
+```
+
+```{r lisa-map, fig.width = 8, fig.height = 7, fig.cap = "LISA clusters (FDR-adjusted) with cliff lines in red."}
+pal <- c(HH = "#ffb000", LL = "#3d8bfd", HL = "#f4a3a3", LH = "#9ec5fe", ns = "#e9ecef")
+plot(sf::st_geometry(lisa), col = pal[lisa$label], border = NA, main = NULL)
+if (nrow(lines)) plot(sf::st_geometry(lines), col = "#ff2d55", lwd = 3, add = TRUE)
+legend("bottomleft", fill = pal, legend = c("High-High", "Low-Low", "High-Low", "Low-High", "Not significant"), bty = "n", cex = 0.8)
+```
+
+## Held-out checks
+
+A cliff is only reported if it survives three tests it was not tuned on:
+
+- **Spatial null.** Surrogate maps from a SAR process calibrated to the same global Moran's I; we rerun the whole search on each and compare every real cliff with the *best* cliff in each surrogate (max-statistic, controls family-wise error).
+- **Time.** The same search on SEIFA 2016, restricted to SA1s whose boundary did not change between ASGS 2016 and 2021. Scores are standardised within year, as ABS advises against comparing raw SEIFA scores across releases.
+- **Sensitivity.** Population floor x minimum border x FDR level (18 runs). Stability = share of runs in which the cliff stays in the top 20.
+
+```{r checks-table}
+cols <- intersect(c("line_id", "border_name", "border_kind", "hi_area", "lo_area", "length_m", "score",
+                    "p_null", "in_2016", "stability", "passes_all"), names(top))
+knitr::kable(utils::head(top[, cols], 10), digits = 3, format.args = list(big.mark = ","))
+```
+
+```{r null-plot, fig.width = 7, fig.height = 3.2, fig.cap = "Best cliff score in each surrogate map (grey) vs real cliffs (red)."}
+if (!is.null(chk)) {
+  hist(chk$null_max, breaks = 20, col = "grey85", border = "white", main = NULL,
+       xlab = "Best cliff score in a surrogate map", xlim = range(c(chk$null_max, top$score, 0)))
+  abline(v = utils::head(top$score, 5), col = "#ff2d55", lwd = 2)
+}
+```
+
+## What worked
+
+```{r worked, results = "asis"}
+if (nrow(top)) {
+  n_pass <- if ("passes_all" %in% names(top)) sum(top$passes_all, na.rm = TRUE) else NA
+  cat(sprintf("- %s cliff lines met the definition; %s of the top %s pass all three checks.\n",
+              meta$n_cliff_lines, n_pass, nrow(top)))
+}
+cat("- The method recovers a planted cliff and ignores a planted outlier and a smooth gradient in the automated test suite (`tests/`).\n")
+```
+
+## What did not work
+
+```{r not-worked, results = "asis"}
+if (nrow(top) && "passes_all" %in% names(top)) {
+  fail <- top[!top$passes_all, ]
+  if (nrow(fail)) cat(sprintf("- %s top-ranked lines failed at least one check and are not used in the post.\n", nrow(fail)))
+}
+if (nrow(top) && "border_kind" %in% names(top)) {
+  phys <- sum(top$border_kind %in% c("water", "park"), na.rm = TRUE)
+  cat(sprintf("- %s of the top lines follow water or parkland. They are real but unsurprising, so the post prefers road and rail cliffs.\n", phys))
+}
+cat("- SA1s vary in size; very small inner-city SA1s make lines short, which the 400 m minimum length penalises.\n")
+```
+
+## Limits
+
+- Area-level data: these are differences between neighbourhoods, not statements about individuals (ecological fallacy).
+- Description, not cause: a cliff shows *where* things change, not *why*.
+- 2021 Census; areas may have changed since.
+- Microburbs data covers only the City of Sydney, so the second-source check applies only to cliffs there.
+
+```{r session, results = "asis"}
+cat(sprintf("\n<small>Run %s · %s · sf %s, spdep %s</small>\n", meta$run_at, meta$r_version,
+            meta$packages$sf, meta$packages$spdep))
+```
