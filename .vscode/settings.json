@@ -1,0 +1,16 @@
+{
+  "r.bracketedPaste": true,
+  "r.sessionWatcher": true,
+  "r.lsp.diagnostics": true,
+  "files.exclude": {
+    "**/.quarto": true
+  },
+  "search.exclude": {
+    "data/**": true,
+    "out/**": true,
+    "demo/**": true
+  },
+  "files.trimTrailingWhitespace": true,
+  "files.insertFinalNewline": true,
+  "editor.rulers": [100]
+}

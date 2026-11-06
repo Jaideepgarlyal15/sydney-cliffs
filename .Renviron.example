@@ -1,0 +1,3 @@
+# Copy this file to .Renviron (which git ignores) and paste the team key after 11 am.
+# R reads .Renviron automatically when it starts in this folder.
+MICROBURBS_API_KEY=
