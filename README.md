@@ -46,7 +46,8 @@ with a 3D map where the edge stands up as a wall.
 | ABS, ASGS Edition 3 (2021) SA1 and Mesh Block boundaries | Areas, residential land share, boundary change flags | CC BY 4.0, © Commonwealth of Australia |
 | OpenStreetMap via the Overpass API | Naming the road, railway, water or park along each cliff | ODbL, © OpenStreetMap contributors |
 | CARTO basemap (map pages only) | Background map in the 3D renders | © CARTO, © OpenStreetMap contributors |
-| Microburbs API (hackathon key) | Second-source check for cliffs inside the City of Sydney | Used on the day only; no API output is stored in this repository |
+| Microburbs API (© Microburbs; automated, indicative estimates; City of Sydney only) | Income figures consistent with the chosen edge (consistency check, not independent confirmation) | Hackathon key, used on the day; no raw API output stored or republished |
+| Microburbs supplied Task 1 files (social hooks, businesses, posts CSVs) | Analysed on the day only | Not republished and not committed, per the hackathon rules |
 
 No supplied hackathon files, API output, licensed data rows or keys are committed. All data is
 downloaded into `data/` and derived into `out/`, both ignored by git.

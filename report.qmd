@@ -145,6 +145,19 @@ if (!is.null(chk) && !is.null(best) && has("p_null")) {
 }
 ```
 
+```{r second-source, results = "asis"}
+mbj_path <- file.path(out, "microburbs_check.json")
+if (file.exists(mbj_path)) {
+  mbj <- jsonlite::read_json(mbj_path)
+  cat(sprintf(
+"**Second source (Microburbs 2026 estimates).** Microburbs' income map (median weekly household income per microburb, one ABS mesh block each) puts the %s side of Young Street at $%s/wk (median of %s microburbs) and the other side at $%s/wk (%s microburbs) — Microburbs 2026 estimates. The result is **consistent with** our ABS figures: the direction and a substantial divide agree, while the magnitude is smaller, as expected from a different source and year (ABS 2021 Census medians vs Microburbs 2026 model estimates, which smooth extremes). Microburbs estimates may draw on the same ABS Census inputs, so this is a consistency check rather than fully independent confirmation. As context, in neighbouring Waterloo the same endpoint ranges from $%s/wk on %s Street to $%s/wk on %s Street (Microburbs 2026 estimates).\n",
+    "higher", format(mbj$young_hi_median_wk, big.mark = ","), mbj$young_hi_n,
+    format(mbj$young_lo_median_wk, big.mark = ","), mbj$young_lo_n,
+    format(mbj$waterloo_lowest_wk, big.mark = ","), mbj$waterloo_lowest_street,
+    format(mbj$waterloo_highest_wk, big.mark = ","), mbj$waterloo_highest_street))
+}
+```
+
 ## Social housing at the edge (ABS G37)
 
 ```{r g37-table, results = "asis"}

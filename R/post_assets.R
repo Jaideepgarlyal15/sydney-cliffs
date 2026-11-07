@@ -317,6 +317,18 @@ post_assets <- function(res, top_tab, flags, sel, cfg, paths) {
             fmt_num(meta$n_units), fmt_num(meta$n_edges), fmt_num(meta$n_units)),
     sprintf("| 11 | Transect sample | %s SA1s | transects.csv n_points | SA1 centroids within %s m of the line | 02_ledge subtitle |",
             fmt_num(nrow(pts)), fmt_num(cfg$transect_radius_m)),
+    {
+      mbj_path <- file.path(paths$out, "microburbs_check.json")
+      if (file.exists(mbj_path)) {
+        mbj <- jsonlite::read_json(mbj_path)
+        c(sprintf("| 12 | Microburbs income, each side of the line | $%s vs $%s /wk | microburbs_check.json young_hi/lo_median_wk | median of %s / %s microburbs (ABS mesh blocks), %s endpoint, called %s; label: %s; a consistency check, not independent confirmation | “Microburbs’ 2026 estimates are consistent with the divide” (report, video beat 4) |",
+                  format(mbj$young_hi_median_wk, big.mark = ","), format(mbj$young_lo_median_wk, big.mark = ","),
+                  mbj$young_hi_n, mbj$young_lo_n, mbj$endpoint, mbj$called_on, mbj$label),
+          sprintf("| 13 | Waterloo income range | $%s (%s St) to $%s (%s St) /wk | microburbs_check.json waterloo_* | same endpoint and date; label: %s | report second-source paragraph |",
+                  format(mbj$waterloo_lowest_wk, big.mark = ","), mbj$waterloo_lowest_street,
+                  format(mbj$waterloo_highest_wk, big.mark = ","), mbj$waterloo_highest_street, mbj$label))
+      } else character(0)
+    },
     "",
     "Numbers NOT published, by design: cliff width in metres (estimate degenerate,",
     "below SA1 resolution of about 170 m); 2016-2021 change at this line (SA1",
@@ -329,20 +341,25 @@ post_assets <- function(res, top_tab, flags, sel, cfg, paths) {
   log_step("asset: ", file.path(dir, "caption_facts.md"))
 
   # ---- video + pitch scripts --------------------------------------------------------------
+  mbj_path <- file.path(paths$out, "microburbs_check.json")
+  has_mbj <- file.exists(mbj_path)
   video <- c(
-    "# demo.mp4 script — 30 seconds, sound-off, five beats",
+    sprintf("# demo.mp4 script — 30 seconds, sound-off, %s beats", if (has_mbj) "six" else "five"),
     "",
     "Every number is traceable via caption_facts.md (fact # in brackets).",
     "",
-    sprintf("1. 0-3 s — 3D map flyover of %s. Caption: “One street in %s.”", where, row$hi_area),
-    if (soc_ok) sprintf("2. 3-9 s — 01_title.png. Caption: “%.0f%% social housing on one side. %.0f%% on the other.” [1, 2]",
+    sprintf("1. 0-3 s — 3D map flyover. Caption: “%s, %s.”", where, row$hi_area),
+    if (soc_ok) sprintf("2. 3-8 s — 01_title.png. Caption: “%.0f%% vs %.0f%% social housing.” [1, 2]",
                         row$social_rent_hi, row$social_rent_lo) else
-                sprintf("2. 3-9 s — 01_title.png. Caption: “%s percentile of advantage, side by side.” [1]", big),
-    sprintf("3. 9-16 s — 3D map, camera crossing the line. Caption: “The %.0fth percentile of advantage meets the bottom 1%% — across %s m of street.” [5, 3]",
-            pct_hi, fmt_num(row$length_m)),
-    sprintf("4. 16-23 s — 05_test.png. Caption: “We rebuilt Sydney %s times to try to break it. Even the sharpest edge is not statistically exceptional (p = %.2f).” [8]",
-            length(readRDS(chk_path)$null_max), row$p_null),
-    "5. 23-30 s — 02_ledge.png, then 04_sydney.png. Caption: “At neighbourhood scale, Sydney’s advantage changes as hills, not cliffs. Sydney Cliffs · ABS Census 2021 & SEIFA.”",
+                sprintf("2. 3-8 s — 01_title.png. Caption: “%s percentile of advantage, side by side.” [1]", big),
+    sprintf("3. 8-14 s — 04_sydney.png. Caption: “The sharpest edge in %s neighbourhoods.” [10]",
+            fmt_num(as.numeric(meta$n_units))),
+    if (has_mbj)
+      "4. 14-19 s — 3D map, camera crossing the line. Caption: “Microburbs’ 2026 estimates are consistent with the divide.” [12]",
+    sprintf("%s. %s s — 05_test.png. Caption: “We tried to break it: not exceptional (p = %.2f).” [8]",
+            if (has_mbj) "5" else "4", if (has_mbj) "19-25" else "16-25", row$p_null),
+    sprintf("%s. 25-30 s — 02_ledge.png. Caption: “Sydney mostly changes as hills, not cliffs.” + “Sydney Cliffs · ABS Census 2021 & SEIFA (CC BY 4.0)”.",
+            if (has_mbj) "6" else "5"),
     ""
   )
   writeLines(video, file.path(dir, "video_script.md"))
