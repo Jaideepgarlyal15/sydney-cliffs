@@ -40,6 +40,19 @@ test_that("G02 parser names the missing column", {
   expect_error(parse_g02(data.frame(SA1_CODE_2021 = "1")), "Median_tot_hhd_inc_weekly")
 })
 
+test_that("G37 parser: social counts, and 'not stated' leaves the denominator", {
+  df <- data.frame(SA1_CODE_2021 = c("1", "2"),
+                   R_ST_h_auth_Total = c(100, 0), R_Com_Hp_Total = c(20, 5),
+                   Total_Total = c(400, 210), Ten_type_NS_Total = c(30, 10))
+  out <- parse_g37(df)
+  expect_equal(out$social_rent, c(120, 5))
+  expect_equal(out$occ_stated, c(370, 200))
+})
+
+test_that("G37 parser names the missing column", {
+  expect_error(parse_g37(data.frame(SA1_CODE_2021 = "1")), "R_ST_h_auth_Total")
+})
+
 test_that("Overpass parser classifies roads, rail, water and parks", {
   js <- jsonlite::fromJSON(test_path("fixtures", "overpass.json"), simplifyVector = FALSE)
   osm <- parse_overpass(js)

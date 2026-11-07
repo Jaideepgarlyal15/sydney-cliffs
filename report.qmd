@@ -27,6 +27,13 @@ lines <- sf::st_read(file.path(out, "cliffs.gpkg"), layer = "lines", quiet = TRU
 best <- if (nrow(top)) top[1, ] else NULL
 fmt <- function(x, d = 0) formatC(x, format = "f", digits = d, big.mark = ",")
 has <- function(col) !is.null(best) && col %in% names(best) && !is.na(best[[col]])
+adv_ok <- file.exists(file.path(out, "transects.csv"))
+sel <- if (file.exists(file.path(out, "selection.json")))
+  jsonlite::read_json(file.path(out, "selection.json")) else NULL
+ci_txt <- function(v, lo, hi, d = 2) {
+  if (!is.finite(v)) return("not available")
+  sprintf("%.*f (95%% CI %.*f to %.*f)", d, v, d, lo, d, hi)
+}
 ```
 
 ```{r synthetic-banner, results = "asis"}
@@ -42,16 +49,21 @@ if (is.null(best)) {
   cat("No cliff line met the criteria at the configured settings. See *What did not work*.\n")
 } else {
   where <- if (has("border_name")) best$border_name else sprintf("the border between %s and %s", best$hi_area, best$lo_area)
+  irsad_all <- sf::st_read(file.path(out, "sa1.gpkg"), quiet = TRUE)$irsad_2021
+  irsad_all <- irsad_all[is.finite(irsad_all)]
+  pct_hi <- 100 * mean(irsad_all <= best$irsad_2021_hi)
+  pct_lo <- 100 * mean(irsad_all <= best$irsad_2021_lo)
   cat(sprintf(
-    "The sharpest socio-economic cliff in Greater Sydney runs %s m along **%s**. On one side (%s), the median SEIFA advantage score is %s; on the other (%s), it is %s. ",
-    fmt(best$length_m), where, best$hi_area, fmt(best$irsad_2021_hi), best$lo_area, fmt(best$irsad_2021_lo)))
-  if (has("hh_income_wk_hi")) cat(sprintf(
-    "Median household income goes from $%s to $%s a week, and median rent from $%s to $%s. ",
-    fmt(best$hh_income_wk_hi), fmt(best$hh_income_wk_lo), fmt(best$rent_wk_hi), fmt(best$rent_wk_lo)))
-  if (has("passes_all")) cat(sprintf(
-    "It %s all three held-out checks (spatial null p = %s, present in 2016: %s, stable in %s%% of sensitivity runs).\n",
-    ifelse(best$passes_all, "passes", "does **not** pass"),
-    format(best$p_null, digits = 2), ifelse(best$in_2016, "yes", "no"), fmt(100 * best$stability)))
+    "**The descriptive result.** %s is the sharpest advantage edge our scan found across Greater Sydney's %s analysed areas. It runs %s m; the SA1s on one side sit at the %.0fth percentile of SEIFA advantage, the other side at the %.1fth. Median household income (not equivalised) is $%s against $%s a week. ",
+    where, fmt(meta$n_units), fmt(best$length_m), pct_hi, pct_lo,
+    fmt(best$hh_income_wk_hi), fmt(best$hh_income_wk_lo)))
+  if (has("social_rent_lo") && best$social_rent_lo > 50) cat(sprintf(
+    "By tenure (ABS Census 2021, G37), %s%% of stated-tenure dwellings on one side are social housing against %s%% on the other, so the edge marks where predominantly social housing meets private housing.\n\n",
+    fmt(best$social_rent_lo, 1), fmt(best$social_rent_hi, 1)))
+  else cat("\n\n")
+  if (has("p_null")) cat(sprintf(
+    "**The scientific result.** Tested against simulated Sydneys with the same overall clustering, even this sharpest edge is **not statistically exceptional** (max-statistic p = %s; sensitivity stability %s%%). At SA1 scale, Sydney's advantage mostly changes as hills, not cliffs — and we report that openly rather than tuning the test until something passes.\n",
+    format(best$p_null, digits = 2), fmt(100 * best$stability)))
 }
 ```
 
@@ -66,6 +78,14 @@ if (is.null(best)) {
 | Microburbs API (City of Sydney only) | Second-source check where available | Hackathon key, output not republished |
 
 Census figures describe **areas in 2021**, not individuals. ABS applies small random adjustments to cells to protect confidentiality, which is one reason for the population floor below.
+
+```{r data-qa, results = "asis"}
+sq <- sf::st_drop_geometry(sf::st_read(file.path(out, "sa1.gpkg"), quiet = TRUE))
+cat(sprintf(
+"Data QA: %s SA1s in scope; missing IRSAD 2021 %.1f%%, household income %.1f%%, rent %.1f%%; IRSAD mean %s (the parser refuses the sheet if this drifts from 1000). Suppressed ABS medians (published as 0) are treated as missing, never as $0.\n",
+fmt(nrow(sq)), 100 * mean(!is.finite(sq$irsad_2021)), 100 * mean(!is.finite(sq$hh_income_wk)),
+100 * mean(!is.finite(sq$rent_wk)), fmt(mean(sq$irsad_2021, na.rm = TRUE))))
+```
 
 ## Method
 
@@ -84,7 +104,7 @@ cat(sprintf(
 "4. **Cliff borders.** Each border splits its neighbourhood into two sides. A border is a cliff border when the gap between the side means is in the top %s%% of all borders **and** the high side contains a significant High-High SA1 while the low side contains a significant Low-Low SA1. A lone outlier cannot pass, because its side is averaged with its ordinary neighbours.\n",
 fmt(100 * (1 - cfg$edge_pct))))
 cat(sprintf(
-"5. **Cliff lines.** Cliff borders within %s m of each other merge into one line, so one noisy border cannot split a cliff; lines shorter than %s m are dropped. Score = median gap percentile x log(length).\n",
+"5. **Cliff lines.** Cliff borders within %s m of each other merge into one line, so one noisy border cannot split a cliff; lines shorter than %s m are dropped. Score = median side gap (in standard deviations) x log(length), so scores are comparable between the real map and the surrogate maps.\n",
 cfg$line_gap_m, cfg$min_line_m))
 ```
 
@@ -117,6 +137,101 @@ if (!is.null(chk)) {
 }
 ```
 
+```{r null-interpret, results = "asis"}
+if (!is.null(chk) && !is.null(best) && has("p_null")) {
+  cat(sprintf(
+"**Interpretation.** %s of the %s surrogate maps produced a best edge scoring at least as high as the top real edge (p = %s). Because each surrogate is re-searched with exactly the same scan, this is the honest benchmark: Sydney-smooth maps routinely contain an edge this sharp somewhere. The descriptive finding stands; the claim of statistical exceptionality does not, and we do not make it.\n",
+    sum(chk$null_max >= best$score), length(chk$null_max), format(best$p_null, digits = 2)))
+}
+```
+
+## Social housing at the edge (ABS G37)
+
+```{r g37-table, results = "asis"}
+if ("social_rent_hi" %in% names(top) && any(is.finite(top$social_rent_hi))) {
+  cat("Share of occupied private dwellings (tenure stated) rented from a state/territory housing authority or community housing provider, among the SA1s touching each line:\n\n")
+  cols <- intersect(c("line_id", "border_name", "hi_area", "lo_area",
+                      "social_rent_hi", "social_rent_lo"), names(top))
+  print(knitr::kable(utils::head(top[, cols], 10), digits = 1,
+                     col.names = c("line", "border", "high side", "low side",
+                                   "social rent, high side %", "social rent, low side %")[seq_along(cols)]))
+  cat("\n\"Predominantly social housing\" is said only of a side above 50%. One SA1 can touch a line on both sides across different borders and is then counted in both side aggregates.\n")
+} else {
+  cat("G37 tenure shares were not computed in this configuration (synthetic data has no tenure table).\n")
+}
+```
+
+## Advanced analysis
+
+```{r advanced-intro, results = "asis"}
+if (!adv_ok) {
+  cat("The step-vs-slope and 2016-change modules were not run in this configuration.\n")
+} else {
+  cat(sprintf(
+"Two further tests probe the chosen cliff. **Step vs slope**: SA1s within %s m of the line enter a transect; a logistic step and a straight line are fitted by Gaussian maximum likelihood and compared by BIC (delta BIC above %s is strong evidence of a step; the sign convention is BIC(linear) minus BIC(logistic), so positive favours the step). The jump at the line comes from local linear fits on each side with a triangular kernel at 300/500/800 m bandwidths; uncertainty is a %s-draw bootstrap over SA1s within each side. **Change since 2016**: side gaps in IRSAD standardised within each year, on SA1s with unchanged boundaries only, per ABS guidance; never raw score differences.\n",
+    fmt(meta$config$transect_radius_m), meta$config$delta_bic_strong, fmt(meta$config$boot_n)))
+}
+```
+
+```{r advanced-table}
+if (adv_ok) {
+  tr <- readr::read_csv(file.path(out, "transects.csv"), show_col_types = FALSE)
+  nm <- top[, intersect(c("line_id", "border_name"), names(top))]
+  tt <- merge(nm, tr, by = "line_id", all.y = TRUE)
+  disp <- data.frame(
+    line = tt$line_id, border = if ("border_name" %in% names(tt)) tt$border_name else NA,
+    n = tt$n_points,
+    delta_bic = sprintf("%.1f [%.1f, %.1f]", tt$delta_bic, tt$delta_bic_lo, tt$delta_bic_hi),
+    width_m   = ifelse(tt$width_m < 1 | tt$width_hi > 1e5, "degenerate",
+                       sprintf("%.0f [%.0f, %.0f]", tt$width_m, tt$width_lo, tt$width_hi)),
+    jump_500  = sprintf("%.2f [%.2f, %.2f]", tt$jump_500, tt$jump_500_lo, tt$jump_500_hi),
+    stable    = tt$jump_stable,
+    gap_change = sprintf("%.2f [%.2f, %.2f]", tt$gap_change, tt$gap_change_lo, tt$gap_change_hi)
+  )
+  disp[] <- lapply(disp, function(x) ifelse(grepl("NA", x), "–", x))
+  knitr::kable(disp, align = "l",
+               caption = "Step-vs-slope and 2016-change for the top lines (95% bootstrap CIs; – = not estimable, usually too few unchanged-boundary SA1s). A 'degenerate' width means the fitted transition collapsed below the ~170 m SA1 resolution: it is an estimator boundary, not a physical width.")
+}
+```
+
+```{r advanced-ledge, fig.width = 8, fig.height = 5, fig.cap = "Descriptive transect of the chosen edge: relative advantage (z) against signed distance from the line, with a straight-line fit. No discontinuity is claimed: the step-vs-slope test was inconclusive here."}
+if (adv_ok) {
+  pts <- readr::read_csv(file.path(out, "transect_points.csv"), show_col_types = FALSE)
+  chosen <- if (!is.null(sel)) sel$line_id else top$line_id[1]
+  p <- pts[pts$line_id == chosen, ]
+  p <- p[order(p$d_m), ]
+  plot(p$d_m, p$z, pch = 19, cex = 0.7,
+       col = ifelse(p$side > 0, "#e6a000", "#3d8bfd"),
+       xlab = "metres from the line (negative = low side)",
+       ylab = "relative advantage (z)")
+  abline(v = 0, col = "grey40")
+  lines(p$d_m, p$fit_linear, lty = 2, col = "grey50", lwd = 2)
+}
+```
+
+```{r advanced-chosen, results = "asis"}
+if (adv_ok && !is.null(sel)) {
+  tr1 <- tr[tr$line_id == sel$line_id, ][1, ]
+  chg <- if (!is.finite(tr1$gap_change_lo)) {
+    "The 2016 comparison is not available here: too few SA1s beside the line kept the same boundary across ASGS editions."
+  } else if (tr1$gap_change_lo > 0) {
+    sprintf("The gap in relative advantage widened between 2016 and 2021 (change %s).", ci_txt(tr1$gap_change, tr1$gap_change_lo, tr1$gap_change_hi))
+  } else if (tr1$gap_change_hi < 0) {
+    sprintf("The gap in relative advantage narrowed between 2016 and 2021 (change %s).", ci_txt(tr1$gap_change, tr1$gap_change_lo, tr1$gap_change_hi))
+  } else {
+    sprintf("The gap in relative advantage was stable between 2016 and 2021 (change %s; the CI includes 0).", ci_txt(tr1$gap_change, tr1$gap_change_lo, tr1$gap_change_hi))
+  }
+  cat(sprintf(
+"**Chosen line (%s):** the highest-scoring edge; no line passed all held-out checks, so every claim about it is descriptive. Jump at the line %s SD (the CI includes 0); step-vs-slope delta BIC %s — %s. The fitted transition width is degenerate (below the ~170 m SA1 resolution) and is not quoted as a physical width. %s\n",
+    sel$where,
+    ci_txt(tr1$jump_500, tr1$jump_500_lo, tr1$jump_500_hi),
+    ci_txt(tr1$delta_bic, tr1$delta_bic_lo, tr1$delta_bic_hi, 1),
+    ifelse(is.finite(tr1$delta_bic) & tr1$delta_bic > meta$config$delta_bic_strong,
+           "strong evidence of a step", "inconclusive between step and slope"),
+    chg))
+}
+```
+
 ## What worked
 
 ```{r worked, results = "asis"}
@@ -137,17 +252,24 @@ if (nrow(top) && "passes_all" %in% names(top)) {
 }
 if (nrow(top) && "border_kind" %in% names(top)) {
   phys <- sum(top$border_kind %in% c("water", "park"), na.rm = TRUE)
-  cat(sprintf("- %s of the top lines follow water or parkland. They are real but unsurprising, so the post prefers road and rail cliffs.\n", phys))
+  if (phys > 0) cat(sprintf("- %s of the top lines follow water or parkland. They are real but unsurprising, so the post prefers road and rail cliffs.\n", phys))
+  else cat("- Every top line follows a road, so no line had to be set aside as a mere water or park boundary.\n")
 }
 cat("- SA1s vary in size; very small inner-city SA1s make lines short, which the 400 m minimum length penalises.\n")
 ```
 
 ## Limits
 
-- Area-level data: these are differences between neighbourhoods, not statements about individuals (ecological fallacy).
-- Description, not cause: a cliff shows *where* things change, not *why*.
+- Household income is **not equivalised** for household size or composition.
+- SA1 resolution limits spatial precision, and ABS designs SA1s around relatively homogeneous areas — so where an edge falls partly reflects that geographic design.
+- **Winner's-curse inflation**: the top-ranked gap is selected as the maximum of thousands of candidates, so its size is biased upward; the max-statistic null is our guard, and it did not pass.
+- The bootstrap resamples SA1s independently, without spatial blocks, so confidence intervals are approximate and likely **too narrow**.
+- The SAR surrogate null assumes broadly uniform clustering across Sydney; real clustering varies spatially.
+- The 2016 comparison is **not comparable** for the chosen line: SA1 boundaries were redrawn, and only about 28% of SA1s within 1 km kept their boundary.
+- The transition cannot be resolved below about one SA1 — roughly 170 m here; the fitted "width" is degenerate and is not quoted as a physical width.
+- **No line passed the full primary test at final settings**; every published claim about the chosen edge is descriptive.
+- Area-level data: differences between neighbourhoods, never statements about individuals (ecological fallacy); a cliff shows *where* things change, not *why*.
 - 2021 Census; areas may have changed since.
-- Microburbs data covers only the City of Sydney, so the second-source check applies only to cliffs there.
 
 ```{r session, results = "asis"}
 cat(sprintf("\n<small>Run %s · %s · sf %s, spdep %s</small>\n", meta$run_at, meta$r_version,

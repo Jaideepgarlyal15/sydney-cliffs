@@ -4,12 +4,20 @@
 
 Microburbs hackathon, 7 November 2026 · Task 1 (social post) · Jaideep and Durand
 
+## Result
+
+1. **Descriptive:** Young Street, Redfern is the sharpest advantage edge our scan found across the
+   11,237 Greater Sydney SA1s in our analysis — 9% social housing on one side, 74% on the other (ABS Census 2021, G37; tenure-stated dwellings).
+2. **Scientific:** tested against 99 simulated Sydneys with the same clustering, even that edge is
+   not statistically exceptional (p = 0.34): at SA1 scale, Sydney's advantage mostly changes as hills, not cliffs.
+
 ## What we built
 
-A reproducible R pipeline that scans every neighbourhood border in Greater Sydney and finds
+A reproducible R pipeline that scans every neighbourhood border in Greater Sydney for
 **cliffs**: places where an advantaged cluster of neighbourhoods directly meets a
-disadvantaged one. The steepest cliff that survives our checks becomes the social post
-(`demo.mp4`), with a 3D map where the cliff stands up as a wall.
+disadvantaged one — then stress-tests every candidate against simulated Sydneys and reports
+the result honestly, pass or fail. The sharpest edge becomes the social post (`demo.mp4`),
+with a 3D map where the edge stands up as a wall.
 
 ## Who it helps
 
@@ -22,25 +30,12 @@ disadvantaged one. The steepest cliff that survives our checks becomes the socia
 
 ## The clever step
 
-Finding a big difference between two neighbours is easy, and usually means one odd area.
-We only count a border as a cliff when **two real clusters meet**:
-
-1. **Clusters.** Local Moran's I (LISA) with 9,999 conditional permutations on second-order
-   neighbourhoods, then Benjamini-Hochberg FDR correction across all SA1s.
-2. **Borders, not areas.** Each shared border splits its neighbourhood into two sides. A border
-   is a cliff border when the gap between the two side means is in the top 5% of all Sydney
-   borders, **and** the high side contains a significant High-High area and the low side a
-   significant Low-Low area. A lone outlier cannot pass this test.
-3. **Lines.** Cliff borders within 150 m merge into lines; lines under 400 m are dropped.
-4. **Proof (our held-out checks):**
-   - *Spatial null*: 99 surrogate maps from a SAR process calibrated to Sydney's real global
-     Moran's I. Each real cliff is compared with the best cliff found in every surrogate
-     (max-statistic, so it controls for searching thousands of borders).
-   - *Time*: the same search on SEIFA 2016, using only SA1s whose boundaries did not change.
-   - *Sensitivity*: 18 reruns across population floor, minimum border length and FDR level.
-
-The test suite plants a cliff, an outlier and a smooth gradient in a synthetic grid and checks
-that the method finds the cliff and nothing else (`tests/testthat/test-method.R`).
+1. **Two real clusters must meet.** LISA (9,999 permutations, BH-FDR) must put a significant High-High area on one side and a Low-Low area on the other; side gaps average each side's neighbourhood, so one odd area can never make a cliff.
+2. **An absolute score.** Lines score by median side gap (in SD) × log(length) — comparable across maps, so the max-statistic SAR null (99 surrogates matched to Sydney's Moran's I) is a fair fight.
+3. **Step, not slope.** A logistic-vs-linear BIC test on each cliff's transect says whether advantage jumps or merely tilts, with a bootstrap CI, a 10–90% width in metres, and a local-linear jump at three bandwidths.
+4. **Time, handled with care.** 2016 vs 2021 side gaps are standardised within year, on unchanged-boundary SA1s only, per ABS guidance.
+5. **Three held-out checks gate every claim** (SAR max-statistic null, 2016 reappearance, 18-run sensitivity grid) and an artefact screen stays visible in the outputs — flags are reported, never waived.
+6. The test suite plants a cliff, an outlier and a smooth gradient in a synthetic grid and proves the method finds the cliff, the step and the planted 2016 widening — and nothing else (`tests/testthat/`).
 
 ## Data
 
@@ -65,7 +60,7 @@ Requirements: R 4.3+, Quarto 1.4+, Git. VS Code with the R and Quarto extensions
 
 ```bash
 Rscript install.R               # install packages (one-off)
-Rscript tests/testthat.R        # 52 tests, about 40 seconds
+Rscript tests/testthat.R        # full test suite (method, parsers, pipeline, advanced)
 Rscript scripts/demo_synthetic.R  # full pipeline on synthetic data, no downloads
 Rscript run_all.R --fast        # real Sydney data, quick look
 Rscript run_all.R               # real Sydney data, full permutations and checks
@@ -84,14 +79,16 @@ R/data.R          download and tidy ABS inputs -> out/sa1.gpkg
 R/edges.R         neighbour pairs and shared-border lines
 R/cliffs.R        LISA, side gaps, cliff borders, cliff lines
 R/checks.R        spatial null, 2016 rerun, sensitivity grid
+R/advanced.R      step-vs-slope transect test and 2016 side-gap change
+R/post_assets.R   artefact screen, fixed-rule line selection, 1080x1920 post assets
 R/streets.R       OpenStreetMap lookup of what runs along each cliff
 R/microburbs.R    Microburbs API client (key from environment only)
 R/maps.R          3D map page per cliff (deck.gl), for screen recording
 R/pipeline.R      orchestration with resumable checkpoints
 run_all.R         command-line entry point
 report.qmd        source of report.html
-tests/            synthetic-data tests for method, parsers and pipeline
-scripts/          synthetic demo and pre-push audit
+tests/            synthetic-data tests for method, parsers, pipeline and advanced
+scripts/          synthetic demo, pre-push audit and hand-off bundle builder
 ```
 
 ## Limits

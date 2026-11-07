@@ -10,7 +10,8 @@ cliffs_config <- function() {
 
     # --- Unit filters ---------------------------------------------------------
     pop_floor          = 150, # drop SA1s with fewer usual residents
-    min_residential    = 0.5, # drop SA1s where < 50% of land area is residential mesh blocks
+    min_residential    = 0.2, # drop SA1s where < 20% of land area is residential mesh blocks
+                              # (0.5 removed 1,378 Sydney SA1s and fragmented the graph)
     min_border_m       = 50,  # drop neighbour pairs sharing less than this much border
 
     # --- LISA -----------------------------------------------------------------
@@ -35,6 +36,16 @@ cliffs_config <- function() {
       fdr_q        = c(0.05, 0.01)
     ),
     grid_nsim      = 999,
+
+    # --- Selection --------------------------------------------------------------
+    chosen_line_id = NA_integer_,      # NA = pick by the fixed rule in select_line();
+                                       # set via --line=<id> on run_all.R to override
+
+    # --- Advanced ---------------------------------------------------------------
+    transect_radius_m = 1500,          # SA1 centroids within this of the line enter the transect
+    rd_bandwidths_m   = c(300, 500, 800), # triangular-kernel bandwidths for the local-linear jump
+    boot_n            = 999,           # bootstrap resamples for transect and gap-change CIs
+    delta_bic_strong  = 10,            # BIC(linear) - BIC(logistic) above this = strong step evidence
 
     # --- External services ----------------------------------------------------
     overpass_url    = "https://overpass-api.de/api/interpreter",

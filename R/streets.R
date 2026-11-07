@@ -52,7 +52,10 @@ fetch_overpass <- function(bbox, cache_dir, url) {
     resp <- httr2::request(url) |>
       httr2::req_user_agent("sydney-cliffs (hackathon research)") |>
       httr2::req_body_form(data = overpass_ql(bbox)) |>
-      httr2::req_retry(max_tries = 4, backoff = function(i) 5 * i) |>
+      # The public server answers 502/504 when busy; treat those as transient too.
+      httr2::req_retry(max_tries = 4, backoff = function(i) 5 * i,
+                       is_transient = function(r)
+                         httr2::resp_status(r) %in% c(429, 502, 503, 504)) |>
       httr2::req_throttle(rate = 1 / 2) |>
       httr2::req_perform()
     writeLines(httr2::resp_body_string(resp), f)

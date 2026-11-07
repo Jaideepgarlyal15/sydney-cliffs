@@ -97,7 +97,10 @@ run_pipeline <- function(stages = "all", cfg = cliffs_config(), paths = cliffs_p
   top <- utils::head(res$lines, cfg$top_n)
 
   # ---- streets ----------------------------------------------------------------------
-  if (want("streets") && online && nrow(top) > 0) {
+  # A stage not in `stages` still loads its existing checkpoint, so a partial run
+  # (e.g. --stages=advanced,maps) never rewrites cliffs_top.csv with columns missing.
+  if (nrow(top) > 0 &&
+      (file.exists(file.path(paths$out, "streets.rds")) || (want("streets") && online))) {
     t <- Sys.time()
     top <- checkpoint("streets", paths, refresh = "streets" %in% force,
                       classify_lines(top, cfg, paths$osm_cache))
@@ -105,7 +108,8 @@ run_pipeline <- function(stages = "all", cfg = cliffs_config(), paths = cliffs_p
   }
 
   # ---- checks -----------------------------------------------------------------------
-  if (want("checks") && nrow(top) > 0) {
+  if (nrow(top) > 0 &&
+      (file.exists(file.path(paths$out, "checks.rds")) || want("checks"))) {
     t <- Sys.time()
     chk <- checkpoint("checks", paths, refresh = "checks" %in% force, {
       null_max <- null_max_scores(res, cfg)
@@ -125,12 +129,25 @@ run_pipeline <- function(stages = "all", cfg = cliffs_config(), paths = cliffs_p
     tick("checks", t)
   }
 
+  # ---- advanced (step-vs-slope + 2016 gap change) -------------------------------------
+  adv <- NULL
+  if (nrow(top) > 0 &&
+      (file.exists(file.path(paths$out, "advanced.rds")) || want("advanced"))) {
+    t <- Sys.time()
+    adv <- checkpoint("advanced", paths, refresh = "advanced" %in% force,
+                      run_advanced(res, top$line_id, cfg, paths))
+    tick("advanced", t)
+  }
+
   # ---- profile + outputs --------------------------------------------------------------
   prof <- profile_lines(res, sf::st_drop_geometry(sa1), vars)
   top_tab <- sf::st_drop_geometry(top)
   cen <- sf::st_coordinates(sf::st_centroid(sf::st_transform(sf::st_geometry(top), 4326)))
   top_tab$lon <- cen[, 1]; top_tab$lat <- cen[, 2]
   if (nrow(prof)) top_tab <- merge(top_tab, prof, by = "line_id", all.x = TRUE)
+  if (!is.null(adv)) top_tab <- merge(top_tab, adv, by = "line_id", all.x = TRUE)
+  top_tab <- merge(top_tab, side_social_rent(res, sf::st_drop_geometry(sa1)),
+                   by = "line_id", all.x = TRUE)
   top_tab <- top_tab[order(-top_tab$score), ]
 
   readr::write_csv(top_tab, file.path(paths$out, "cliffs_top.csv"))
@@ -149,6 +166,17 @@ run_pipeline <- function(stages = "all", cfg = cliffs_config(), paths = cliffs_p
                       subtitle = sprintf("%s vs %s", row$hi_area, row$lo_area),
                       value_label = head_var$label)
     }
+  }
+
+  # ---- assets (artefact screen, fixed-rule selection, post PNGs) ----------------------
+  # After maps, so the chosen line's map (with the big number) is the one that stays.
+  if (want("assets") && !is.null(adv) && nrow(top) > 0) {
+    t <- Sys.time()
+    flags <- checkpoint("artefacts", paths, refresh = "assets" %in% force,
+                        artefact_screen(res, sa1, top_tab, cfg, paths))
+    sel <- select_line(top_tab, flags, cfg)
+    post_assets(res, top_tab, flags, sel, cfg, paths)
+    tick("assets", t)
   }
 
   meta <- list(

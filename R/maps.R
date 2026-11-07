@@ -19,7 +19,7 @@ line_bearing <- function(line) {
 }
 
 write_cliff_map <- function(res, line_id, out_file, title, subtitle, value_label,
-                            radius_m = 1500, height_m = 1200) {
+                            big_number = "", radius_m = 1500, height_m = 1200) {
   ln <- res$lines[res$lines$line_id == line_id, ]
   assert_that(nrow(ln) == 1, paste("no cliff line with id", line_id))
   units <- res$units
@@ -41,7 +41,8 @@ write_cliff_map <- function(res, line_id, out_file, title, subtitle, value_label
     "__BEARING__" = sprintf("%.1f", line_bearing(ln)),
     "__TITLE__" = htmlEscape(title),
     "__SUBTITLE__" = htmlEscape(subtitle),
-    "__VALUE_LABEL__" = htmlEscape(value_label)
+    "__VALUE_LABEL__" = htmlEscape(value_label),
+    "__BIG_NUMBER__" = htmlEscape(big_number)
   )
   for (k in names(subs)) html <- gsub(k, subs[[k]], html, fixed = TRUE)
   ensure_dir(dirname(out_file))

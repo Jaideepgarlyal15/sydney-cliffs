@@ -141,7 +141,8 @@ find_cliffs <- function(units, edges, var, type = "score",
 # other belong to the same cliff, so one noisy border does not split a cliff in two.
 merge_cliff_lines <- function(borders, units, min_line_m, line_gap_m = 0) {
   empty <- sf::st_sf(line_id = integer(), length_m = numeric(), n_borders = integer(),
-                     gap_pct = numeric(), gap = numeric(), score = numeric(),
+                     gap_pct = numeric(), gap = numeric(), side_gap = numeric(),
+                     score = numeric(),
                      hi_value = numeric(), lo_value = numeric(),
                      hi_area = character(), lo_area = character(),
                      geometry = sf::st_sfc(crs = sf::st_crs(units)))
@@ -165,6 +166,7 @@ merge_cliff_lines <- function(borders, units, min_line_m, line_gap_m = 0) {
       length_m  = sum(w),
       n_borders = length(idx),
       gap_pct   = stats::median(b$gap_pct),
+      side_gap  = stats::median(b$side_gap),
       gap       = stats::weighted.mean(b$gap, w),
       hi_value  = stats::weighted.mean(b$hi_value, w),
       lo_value  = stats::weighted.mean(b$lo_value, w),
@@ -176,10 +178,13 @@ merge_cliff_lines <- function(borders, units, min_line_m, line_gap_m = 0) {
   lines <- do.call(rbind, pieces)
   lines <- lines[lines$length_m >= min_line_m, ]
   if (nrow(lines) == 0) return(empty)
-  lines$score <- lines$gap_pct * log(lines$length_m)
+  # Score on the ABSOLUTE jump (median side gap in standard deviations), not on its
+  # within-map percentile: a percentile always has a "top 5%", so it cannot be compared
+  # across the real map and the surrogate maps in the max-statistic null.
+  lines$score <- lines$side_gap * log(lines$length_m)
   lines <- lines[order(-lines$score), ]
   lines$line_id <- seq_len(nrow(lines))
   rownames(lines) <- NULL
-  lines[, c("line_id", "length_m", "n_borders", "gap_pct", "gap", "score",
+  lines[, c("line_id", "length_m", "n_borders", "gap_pct", "gap", "side_gap", "score",
             "hi_value", "lo_value", "hi_area", "lo_area")]
 }

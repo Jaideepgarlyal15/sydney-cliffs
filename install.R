@@ -7,6 +7,7 @@ needed <- c(
   "dplyr", "readr", "readxl",         # tables and ABS spreadsheets
   "httr2", "jsonlite",                # HTTP (ABS, Overpass, Microburbs) and JSON
   "testthat",                         # tests
+  "ggplot2", "ragg",                  # post assets (1080x1920 PNGs)
   "knitr", "rmarkdown",               # Quarto's R engine
   "languageserver"                    # VS Code R extension: autocomplete, hover help
 )

@@ -67,6 +67,38 @@ test_that("the planted cliff beats every surrogate (max-statistic null)", {
   expect_equal(null_pvalues(r$lines$score[1], null_max), 1 / 20)
 })
 
+test_that("merged lines carry side_gap, and score = side gap x log(length)", {
+  expect_true("side_gap" %in% names(r$lines))
+  expect_equal(r$lines$score, r$lines$side_gap * log(r$lines$length_m))
+  e <- merge_cliff_lines(r$borders[0, ], r$units, 400, 150)
+  expect_true("side_gap" %in% names(e))   # empty frame keeps the full schema
+})
+
+test_that("score is invariant to a monotonic relabelling of gap percentiles", {
+  b2 <- r$borders
+  b2$gap_pct <- stats::pnorm(3 * (b2$gap_pct - 0.5))
+  l1 <- merge_cliff_lines(r$borders, r$units, 400, 150)
+  l2 <- merge_cliff_lines(b2, r$units, 400, 150)
+  expect_equal(l1$score, l2$score)
+})
+
+test_that("the planted absolute jump is recovered by side_gap", {
+  zz <- standardise(s$irsad_2021)
+  expected <- mean(zz[s$col <= 15]) - mean(zz[s$col > 15])
+  expect_lt(abs(r$lines$side_gap[1] - expected) / expected, 0.2)
+})
+
+test_that("surrogate maps are scored with the same definition as the real map", {
+  nb <- edges_to_nb(r$edges, nrow(r$units))
+  Y <- sar_surrogate(nb, 0.9, 1, seed = 11)
+  u <- r$units; u$.sim <- Y[, 1]
+  rs <- find_cliffs(u, r$edges, ".sim", "score", nsim = 199, q = 0.05,
+                    min_line_m = 400, seed = 2)
+  if (nrow(rs$lines) > 0)
+    expect_equal(rs$lines$score, rs$lines$side_gap * log(rs$lines$length_m))
+  expect_equal(r$lines$score, r$lines$side_gap * log(r$lines$length_m))
+})
+
 test_that("reappears() matches lines within the distance", {
   expect_true(all(reappears(r$lines, r$lines, 1)))
   far <- sf::st_set_geometry(r$lines, sf::st_geometry(r$lines) + c(5000, 0))

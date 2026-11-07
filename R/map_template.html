@@ -16,6 +16,8 @@
              text-shadow: 0 2px 12px rgba(0,0,0,.8); }
   .caption h1 { font-size: clamp(22px, 4.2vh, 56px); line-height: 1.1; margin: 0 0 .4em; font-weight: 800; }
   .caption p { font-size: clamp(14px, 2.2vh, 30px); margin: 0; opacity: .9; }
+  .caption .big { font-size: clamp(40px, 9vh, 120px); font-weight: 900; color: #ff2d55;
+                  margin: .15em 0 0; letter-spacing: -0.02em; }
   .legend { position: absolute; left: 6%; bottom: 6%; color: #fff; font-size: clamp(11px, 1.6vh, 20px);
             text-shadow: 0 1px 6px rgba(0,0,0,.9); }
   .sw { display: inline-block; width: .9em; height: .9em; border-radius: 2px; margin: 0 .35em 0 1em; vertical-align: -0.1em; }
@@ -25,7 +27,7 @@
 <body>
 <div id="frame">
   <div id="map"></div>
-  <div class="caption"><h1>__TITLE__</h1><p>__SUBTITLE__</p></div>
+  <div class="caption"><h1>__TITLE__</h1><p>__SUBTITLE__</p><div class="big">__BIG_NUMBER__</div></div>
   <div class="legend">Height = __VALUE_LABEL__ (percentile)
     <span class="sw" style="background:#ffb000"></span>High cluster
     <span class="sw" style="background:#3d8bfd"></span>Low cluster

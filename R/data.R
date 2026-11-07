@@ -63,10 +63,50 @@ parse_g02 <- function(df) {
   out
 }
 
+# G37: tenure and landlord type. Social rental = rented from a state or
+# territory housing authority plus rented from a community housing provider.
+# Denominator = occupied private dwellings whose tenure type is stated
+# (Total_Total minus Ten_type_NS_Total), so "not stated" never dilutes a share.
+parse_g37 <- function(df) {
+  need <- c("SA1_CODE_2021", "R_ST_h_auth_Total", "R_Com_Hp_Total",
+            "Total_Total", "Ten_type_NS_Total")
+  assert_that(all(need %in% names(df)),
+              paste("G37: missing columns:", paste(setdiff(need, names(df)), collapse = ", ")))
+  data.frame(
+    sa1_code    = as.character(df$SA1_CODE_2021),
+    social_rent = as.numeric(df$R_ST_h_auth_Total) + as.numeric(df$R_Com_Hp_Total),
+    occ_stated  = as.numeric(df$Total_Total) - as.numeric(df$Ten_type_NS_Total)
+  )
+}
+
 read_census <- function(gcp_dir) {
   g01 <- readr::read_csv(find_file(gcp_dir, "G01_NSW_SA1\\.csv$"), show_col_types = FALSE)
   g02 <- readr::read_csv(find_file(gcp_dir, "G02_NSW_SA1\\.csv$"), show_col_types = FALSE)
-  merge(parse_g01(g01), parse_g02(g02), by = "sa1_code", all = TRUE)
+  g37 <- readr::read_csv(find_file(gcp_dir, "G37_NSW_SA1\\.csv$"), show_col_types = FALSE)
+  Reduce(function(a, b) merge(a, b, by = "sa1_code", all = TRUE),
+         list(parse_g01(g01), parse_g02(g02), parse_g37(g37)))
+}
+
+# Population(dwelling)-weighted social-rental share (%) of the SA1s touching
+# each cliff line, per side. Returns one row per line_id; NA columns when the
+# table lacks G37 counts (e.g. synthetic data).
+side_social_rent <- function(res, sa1_tab) {
+  b <- sf::st_drop_geometry(res$borders)
+  ids <- sort(unique(b$line_id[!is.na(b$line_id)]))
+  out <- data.frame(line_id = ids, social_rent_hi = NA_real_, social_rent_lo = NA_real_)
+  if (!all(c("social_rent", "occ_stated") %in% names(sa1_tab))) return(out)
+  codes <- res$units$sa1_code
+  share <- function(idx) {
+    s <- sa1_tab[match(unique(codes[idx]), sa1_tab$sa1_code), ]
+    d <- sum(s$occ_stated, na.rm = TRUE)
+    if (d <= 0) NA_real_ else round(100 * sum(s$social_rent, na.rm = TRUE) / d, 1)
+  }
+  for (k in seq_along(ids)) {
+    bi <- b[which(b$line_id == ids[k]), ]
+    out$social_rent_hi[k] <- share(bi$hi_unit)
+    out$social_rent_lo[k] <- share(bi$lo_unit)
+  }
+  out
 }
 
 # ---- Boundaries and land use ---------------------------------------------------

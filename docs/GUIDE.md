@@ -46,7 +46,6 @@ git --version
    installs:
    - **R** (REditorSupport.r): run R lines with Ctrl/Cmd+Enter, hover help, autocomplete.
    - **Quarto**: preview and render `report.qmd`.
-   - **Claude Code**: for vibe coding inside the editor.
 4. Open the terminal: **Terminal → New Terminal** (Ctrl+` ). It opens in the project folder.
 
 | Command | What it does |
@@ -239,8 +238,8 @@ ABS files   neighbours    clusters      names + proof            pictures + writ
   hard-coded number, so the report prints exactly what was used.
   - `pop_floor = 150`: SA1s with fewer residents are dropped, because ABS adds small random
     noise to protect privacy and tiny counts swing wildly.
-  - `min_residential = 0.5`: drop SA1s that are mostly parks, industry or airport, using the
-    ABS mesh block land-use category.
+  - `min_residential = 0.2`: drop SA1s that are mostly parks, industry or airport, using the
+    ABS mesh block land-use category (0.5 fragmented the real Sydney graph).
   - `min_border_m = 50`: two SA1s are neighbours only if they share 50 m of boundary.
   - `lisa_order = 2`: LISA looks at neighbours and neighbours-of-neighbours (see cliffs.R for
     why).
@@ -311,7 +310,7 @@ ABS files   neighbours    clusters      names + proof            pictures + writ
    holds a significant HH SA1 and the low side a significant LL SA1. So a cliff is always two
    real clusters meeting, never one outlier.
 6. **Lines.** `merge_cliff_lines()` joins cliff borders within 150 m into one line, drops lines
-   under 400 m, and scores each line as `median gap percentile × log(length)`. It also records
+   under 400 m, and scores each line as `median side gap (SD units) × log(length)`, an absolute jump size that the null test can compare across maps. It also records
    the values and area names on each side.
 
 ### `R/checks.R`: is it real?
@@ -365,7 +364,10 @@ ABS files   neighbours    clusters      names + proof            pictures + writ
 - `cliffs_variables()` lists the variables: SEIFA IRSAD is the headline; income, rent and age
   describe what changes across each cliff.
 - `checkpoint()` saves each stage's result as `.rds` and reloads it next time. `--force=`
-  recomputes a stage.
+  recomputes a stage (`edges`, `cliffs`, `streets`, `checks`, `advanced`).
+- The `advanced` stage (`R/advanced.R`) adds the step-vs-slope transect test and the
+  2016 vs 2021 side-gap change for each top line, writing `out/transects.csv` and
+  `out/transect_points.csv` and merging the summary into `out/cliffs_top.csv`.
 - `profile_lines()` gives each cliff its side-by-side numbers on every variable.
 - `run_pipeline()` runs the stages, joins everything into `out/cliffs_top.csv`, writes
   `out/cliffs.gpkg` (layers `lines` and `lisa`), the map pages, and `out/run_meta.json` with the

@@ -1,7 +1,6 @@
 {
   "recommendations": [
     "REditorSupport.r",
-    "quarto.quarto",
-    "anthropic.claude-code"
+    "quarto.quarto"
   ]
 }
