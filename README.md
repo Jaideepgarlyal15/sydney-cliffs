@@ -16,8 +16,9 @@ Microburbs hackathon, 7 November 2026 · Task 1 (social post) · Jaideep and Dur
 A reproducible R pipeline that scans every neighbourhood border in Greater Sydney for
 **cliffs**: places where an advantaged cluster of neighbourhoods directly meets a
 disadvantaged one — then stress-tests every candidate against simulated Sydneys and reports
-the result honestly, pass or fail. The sharpest edge becomes the social post (`demo.mp4`),
-with a 3D map where the edge stands up as a wall.
+the result honestly, pass or fail. [`demo.mp4`](demo.mp4) opens with the social post and
+walks through the method and checks; [`pitch.mp4`](pitch.mp4) is the 45-second pitch. The
+3D map lets the edge stand up as a wall.
 
 ## Who it helps
 
